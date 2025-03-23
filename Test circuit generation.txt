@@ -1,0 +1,64 @@
+#include <iostream>
+#include <vector>
+#include <cmath>
+#include <algorithm>
+#include <unordered_map>
+#include <chrono>
+#include <thread>
+#include <limits>
+#include <random>
+
+using namespace std;
+
+// 单元格结构
+struct Cell {
+    int id; // 单元格ID
+    int row; // 所在行
+    int col; // 所在列
+    vector<int> connections; // 连接的单元格ID
+    double x = 0.0; // x坐标
+    double y = 0.0; // y坐标
+};
+
+// 缓冲器结构
+struct Buffer {
+    int id; // 缓冲器ID
+    double x; // x坐标
+    double y; // y坐标
+};
+
+// 电路结构
+struct Circuit {
+    vector<Cell> cells; // 单元格列表
+    vector<Buffer> buffers; // 缓冲器列表
+    int rows; // 行数
+    int cols; // 列数
+};
+
+// 生成随机测试电路
+void generateRandomCircuit(Circuit& circuit, int rows, int cols, int avgConnections) {
+    circuit.rows = rows;
+    circuit.cols = cols;
+    circuit.cells.clear();
+    circuit.buffers.clear();
+
+    int cellId = 0;
+    for (int r = 0; r < rows; ++r) {
+        for (int c = 0; c < cols; ++c) {
+            Cell cell;
+            cell.id = cellId++;
+            cell.row = r;
+            cell.col = c;
+            cell.connections.clear();
+
+            // 随机生成连接
+            int numConnections = rand() % (avgConnections * 2) + avgConnections;
+            for (int i = 0; i < numConnections; ++i) {
+                int connId = rand() % (rows * cols);
+                cell.connections.push_back(connId);
+            }
+
+            circuit.cells.push_back(cell);
+        }
+    }
+}

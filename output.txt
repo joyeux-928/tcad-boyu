@@ -1,0 +1,3 @@
+Topology Initialization Time: 0.0123 seconds
+Placement and Buffering Time: 0.0456 seconds
+Total Buffers Inserted: 15

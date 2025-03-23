@@ -1,0 +1,30 @@
+int main() {
+    // 设置随机种子
+    srand(42);
+
+    // 生成随机电路
+    Circuit circuit;
+    int rows = 10; // 行数
+    int cols = 10; // 列数
+    int avgConnections = 3; // 平均连接数
+    generateRandomCircuit(circuit, rows, cols, avgConnections);
+
+    // 测量拓扑初始化的运行时间
+    auto start = chrono::high_resolution_clock::now();
+    topologyInitialization(circuit);
+    auto end = chrono::high_resolution_clock::now();
+    double topologyTime = chrono::duration<double>(end - start).count();
+    cout << "Topology Initialization Time: " << topologyTime << " seconds" << endl;
+
+    // 测量布局和缓冲的运行时间
+    start = chrono::high_resolution_clock::now();
+    placementAndBuffering(circuit);
+    end = chrono::high_resolution_clock::now();
+    double placementTime = chrono::duration<double>(end - start).count();
+    cout << "Placement and Buffering Time: " << placementTime << " seconds" << endl;
+
+    // 输出结果
+    cout << "Total Buffers Inserted: " << circuit.buffers.size() << endl;
+
+    return 0;
+}
