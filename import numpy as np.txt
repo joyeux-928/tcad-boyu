@@ -1,0 +1,206 @@
+import numpy as np
+from collections import defaultdict
+
+class AQFPPathBalancer:
+    def __init__(self, max_wirelength=1.0):
+        """
+        初始化AQFP路径平衡器
+        :param max_wirelength: 最大允许线长(单位:mm)
+        """
+        self.max_wirelength = max_wirelength
+        self.cells = []          # 所有逻辑单元
+        self.rows = []           # 按行组织的单元
+        self.connections = []    # 单元连接关系
+        self.buffers = []        # 插入的缓冲器
+        
+    def load_circuit(self, netlist):
+        """
+        加载电路网表
+        :param netlist: 包含单元、行信息和连接的网表
+        """
+        self.cells = netlist['cells']
+        self.rows = netlist['rows']
+        self.connections = netlist['connections']
+        
+    def check_data_synchronization(self):
+        """
+        检查数据同步约束(路径平衡)
+        返回需要平衡的连接列表
+        """
+        violations = []
+        for src, dst in self.connections:
+            src_row = self._find_cell_row(src)
+            dst_row = self._find_cell_row(dst)
+            
+            # 检查是否跨越非相邻行
+            if abs(dst_row - src_row) > 1:
+                violations.append((src, dst, src_row, dst_row))
+                
+        return violations
+    
+    def check_wirelength_constraint(self):
+        """
+        检查线长约束
+        返回违反线长的连接列表
+        """
+        violations = []
+        for src, dst in self.connections:
+            src_pos = self._get_cell_position(src)
+            dst_pos = self._get_cell_position(dst)
+            wirelength = self._calculate_distance(src_pos, dst_pos)
+            
+            if wirelength > self.max_wirelength:
+                violations.append((src, dst, wirelength))
+                
+        return violations
+    
+    def path_balancing(self):
+        """
+        执行路径平衡算法
+        """
+        # 1. 首先处理数据同步约束
+        sync_violations = self.check_data_synchronization()
+        
+        for src, dst, src_row, dst_row in sync_violations:
+            # 确定需要插入缓冲器的行范围
+            start_row = min(src_row, dst_row) + 1
+            end_row = max(src_row, dst_row)
+            
+            # 在每对相邻行之间插入缓冲器行
+            for row in range(start_row, end_row):
+                self._insert_buffer_row(row)
+                
+            # 更新连接关系
+            self._update_connections(src, dst, start_row, end_row)
+        
+        # 2. 然后处理线长约束
+        wirelength_violations = self.check_wirelength_constraint()
+        
+        for src, dst, wirelength in wirelength_violations:
+            # 计算需要插入的缓冲器数量
+            num_buffers = int(np.ceil(wirelength / self.max_wirelength)) - 1
+            
+            if num_buffers > 0:
+                # 找到连接跨越的行
+                src_row = self._find_cell_row(src)
+                dst_row = self._find_cell_row(dst)
+                
+                # 在中间位置插入缓冲器行
+                middle_row = (src_row + dst_row) // 2
+                self._insert_buffer_row(middle_row)
+                
+                # 更新连接关系
+                self._split_connection(src, dst, middle_row)
+    
+    def _find_cell_row(self, cell_id):
+        """
+        查找单元所在的行
+        """
+        for row_idx, row in enumerate(self.rows):
+            if cell_id in row:
+                return row_idx
+        return -1
+    
+    def _get_cell_position(self, cell_id):
+        """
+        获取单元的物理位置(简化实现)
+        实际应用中需要更精确的位置计算
+        """
+        row = self._find_cell_row(cell_id)
+        col = self.rows[row].index(cell_id)
+        return (col * 0.1, row * 0.5)  # 假设每个单元宽0.1mm，行间距0.5mm
+    
+    def _calculate_distance(self, pos1, pos2):
+        """
+        计算两点之间的欧几里得距离
+        """
+        return np.sqrt((pos2[0]-pos1[0])**2 + (pos2[1]-pos1[1])**2)
+    
+    def _insert_buffer_row(self, row_idx):
+        """
+        在指定行索引处插入缓冲器行
+        """
+        # 创建缓冲器ID(实际应用中需要更复杂的ID生成)
+        buffer_id = f"buffer_{len(self.buffers)}"
+        self.buffers.append(buffer_id)
+        
+        # 在指定位置插入新行
+        if row_idx < len(self.rows):
+            self.rows.insert(row_idx, [buffer_id])
+        else:
+            self.rows.append([buffer_id])
+    
+    def _update_connections(self, src, dst, start_row, end_row):
+        """
+        更新连接关系，考虑新插入的缓冲器
+        """
+        # 移除原始连接
+        self.connections.remove((src, dst))
+        
+        # 添加新的连接链
+        prev_cell = src
+        for row in range(start_row, end_row):
+            buffer_id = self.rows[row][0]  # 假设每行只有一个缓冲器
+            self.connections.append((prev_cell, buffer_id))
+            prev_cell = buffer_id
+        self.connections.append((prev_cell, dst))
+    
+    def _split_connection(self, src, dst, middle_row):
+        """
+        分割长连接，插入缓冲器
+        """
+        # 移除原始连接
+        self.connections.remove((src, dst))
+        
+        # 获取中间缓冲器
+        buffer_id = self.rows[middle_row][0]
+        
+        # 创建两个新连接
+        self.connections.append((src, buffer_id))
+        self.connections.append((buffer_id, dst))
+    
+    def get_result(self):
+        """
+        获取平衡后的电路信息
+        """
+        return {
+            'cells': self.cells + self.buffers,
+            'rows': self.rows,
+            'connections': self.connections,
+            'inserted_buffers': self.buffers
+        }
+
+
+# 示例用法
+if __name__ == "__main__":
+    # 示例电路网表
+    example_netlist = {
+        'cells': ['c1', 'c2', 'c3', 'c4', 'c5'],
+        'rows': [
+            ['c1', 'c2'],  # 第0行
+            ['c3'],        # 第1行 
+            ['c4', 'c5']   # 第2行
+        ],
+        'connections': [
+            ('c1', 'c4'),  # 跨越两行的连接(需要平衡)
+            ('c3', 'c5'),  # 相邻行连接
+            ('c2', 'c5')   # 长连接(假设超过最大线长)
+        ]
+    }
+    
+    # 创建并运行平衡器
+    balancer = AQFPPathBalancer(max_wirelength=1.0)
+    balancer.load_circuit(example_netlist)
+    
+    print("Before balancing:")
+    print("Data sync violations:", balancer.check_data_synchronization())
+    print("Wirelength violations:", balancer.check_wirelength_constraint())
+    
+    # 执行路径平衡
+    balancer.path_balancing()
+    
+    print("\nAfter balancing:")
+    result = balancer.get_result()
+    print("Inserted buffers:", result['inserted_buffers'])
+    print("Updated connections:", result['connections'])
+    print("New row structure:", result['rows'])
